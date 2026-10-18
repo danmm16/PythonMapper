@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "pythonmapper"
+name = "pythonmapper-dmm"
 dynamic = ["version"]
 description = "Find, map and manage every Python interpreter, virtual environment, conda env and Jupyter kernel on your machine."
 readme = "README.md"
