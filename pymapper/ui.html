@@ -1,0 +1,654 @@
+<!doctype html>
+<!-- PythonMapper. Made by Daniel Margolis. MIT License. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="author" content="Daniel Margolis">
+<meta name="generator" content="PythonMapper by Daniel Margolis">
+<title>PythonMapper</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #637083; --line: #dde2ea;
+  --accent: #2f6fde; --accent-ink: #ffffff; --hover: #eef3fc; --code: #f0f2f6;
+  --bad: #c9382b; --bad-bg: #fdeceb; --warn-line: #f2b8b2;
+  --k-base: #2f6fde; --k-conda-root: #1f9d6b; --k-conda: #3fb983; --k-venv: #8a5cd6;
+  --k-user: #b07a1e; --k-missing: #c9382b; --k-kernel: #e0661c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #12161d; --panel: #1a1f28; --ink: #e5e9f0; --muted: #94a0b2; --line: #2c3442;
+    --accent: #5b92f0; --accent-ink: #0b1220; --hover: #222b39; --code: #232a36;
+    --bad: #f07a6e; --bad-bg: #3a1f1d; --warn-line: #6b2e28;
+    --k-base: #5b92f0; --k-conda-root: #3cc48b; --k-conda: #6ad6a3; --k-venv: #ae8af0;
+    --k-user: #d9a54a; --k-missing: #f07a6e; --k-kernel: #f39456;
+    color-scheme: dark;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; display: flex; flex-direction: column; }
+button { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+button:hover { background: var(--hover); }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+button:disabled { opacity: .5; cursor: default; }
+input[type=search], input[type=text] { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; min-width: 0; }
+code, pre { font: 12px/1.4 ui-monospace, "Cascadia Code", Menlo, Consolas, monospace; }
+a { color: var(--accent); cursor: pointer; text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
+header h1 { font-size: 16px; margin: 0; white-space: nowrap; }
+header h1 span { color: var(--accent); }
+#stats { color: var(--muted); font-size: 13px; flex: 1 1 260px; }
+#search { flex: 0 1 320px; width: 320px; }
+.tabs { display: flex; gap: 2px; padding: 0 16px; background: var(--panel); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; padding: 8px 12px; color: var(--muted); white-space: nowrap; }
+.tabs button.on { color: var(--ink); border-bottom-color: var(--accent); }
+
+main { flex: 1; display: grid; grid-template-columns: minmax(0, 1fr) 400px; min-height: 0; }
+.view { overflow: auto; padding: 16px; min-width: 0; }
+aside { border-left: 1px solid var(--line); background: var(--panel); overflow: auto; padding: 16px; }
+@media (max-width: 900px) {
+  main { display: block; overflow: auto; }
+  .view { overflow: visible; }
+  aside { border-left: 0; border-top: 1px solid var(--line); }
+}
+
+/* Map */
+#graph { overflow-x: auto; }
+#graph svg { display: block; }
+.col-title { fill: var(--muted); font-size: 12px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
+.node { cursor: pointer; }
+.node rect.box { fill: var(--panel); stroke: var(--line); stroke-width: 1; }
+.node:hover rect.box, .node.hl rect.box { stroke: var(--accent); }
+.node.sel rect.box { stroke: var(--accent); stroke-width: 2; }
+.node.bad rect.box { stroke: var(--bad); stroke-dasharray: 4 3; }
+.node.dim { opacity: .22; }
+.node text { fill: var(--ink); font-size: 13px; }
+.node text.sub { fill: var(--muted); font-size: 11px; }
+.edge { fill: none; stroke: var(--line); stroke-width: 1.5; }
+.edge.dash { stroke-dasharray: 4 4; }
+.edge.hl { stroke: var(--accent); stroke-width: 2; }
+.edge.dim { opacity: .2; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 12px; color: var(--muted); font-size: 12px; }
+.legend i, .badge i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: 0; }
+.empty { color: var(--muted); padding: 40px 0; text-align: center; }
+
+/* Details */
+aside h2 { font-size: 17px; margin: 6px 0 10px; word-break: break-word; }
+aside h3 { font-size: 13px; margin: 20px 0 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+.badge { display: inline-block; font-size: 12px; padding: 1px 8px; border: 1px solid var(--line); border-radius: 99px; margin: 0 4px 4px 0; color: var(--muted); white-space: nowrap; }
+dl { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 10px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; word-break: break-all; }
+.issue { background: var(--bad-bg); border: 1px solid var(--warn-line); color: var(--ink); border-radius: 6px; padding: 8px 10px; margin: 8px 0; }
+.issue b { color: var(--bad); }
+.cmd { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 8px; align-items: center; margin-bottom: 8px; }
+.cmd span { color: var(--muted); font-size: 12px; grid-column: 1 / -1; }
+.cmd code { background: var(--code); padding: 5px 7px; border-radius: 5px; overflow-x: auto; white-space: nowrap; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.row input { flex: 1 1 140px; }
+pre.log { background: var(--code); padding: 8px; border-radius: 6px; max-height: 260px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+td.x { width: 1%; white-space: nowrap; }
+td small { color: var(--muted); display: block; }
+.mini { padding: 0 7px; font-size: 12px; }
+.credit { margin-top: 28px; padding-top: 10px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+.muted { color: var(--muted); }
+
+/* Packages / locations */
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-bottom: 12px; color: var(--muted); }
+.chip { display: inline-block; font-size: 12px; padding: 1px 7px; margin: 2px 4px 2px 0; border-radius: 4px; background: var(--code); cursor: pointer; }
+.chip:hover { background: var(--hover); }
+.chip.odd { outline: 1px solid var(--bad); }
+.ok { color: var(--k-conda-root); }
+button.danger { color: var(--bad); border-color: var(--warn-line); }
+button.danger.solid { background: var(--bad); border-color: var(--bad); color: var(--panel); }
+select { font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); padding: 18px; width: min(560px, calc(100% - 32px)); max-height: calc(100% - 48px); overflow: auto; }
+dialog::backdrop { background: rgba(0, 0, 0, .45); }
+dialog h2 { margin: 0 0 12px; font-size: 17px; }
+dialog label { display: block; margin: 10px 0 4px; color: var(--muted); font-size: 13px; }
+dialog input[type=text], dialog select { width: 100%; }
+dialog ol { padding-left: 20px; margin: 8px 0; }
+dialog ol li { margin-bottom: 8px; }
+dialog ol code { display: block; background: var(--code); padding: 4px 6px; border-radius: 4px; margin-top: 3px; word-break: break-all; }
+.dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.danger-zone { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); }
+#toast { position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 8px 14px; border-radius: 6px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+#toast.on { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1 title="Made by Daniel Margolis">Python<span>Mapper</span></h1>
+  <div id="stats">Loading…</div>
+  <input id="search" type="search" placeholder="Filter by name, path or package (e.g. numpy)" aria-label="Filter">
+  <button id="newenv" hidden>New environment</button>
+  <button id="newpython" hidden>Install Python</button>
+  <button id="rescan" class="primary">Rescan</button>
+  <button id="export" title="Download the scan as JSON">Export</button>
+</header>
+<nav class="tabs" id="tabs">
+  <button data-view="map" class="on">Map</button>
+  <button data-view="packages">Packages</button>
+  <button data-view="locations">Searched locations</button>
+</nav>
+<main>
+  <section class="view" id="view-map">
+    <div class="legend" id="legend"></div>
+    <div id="graph"></div>
+  </section>
+  <section class="view" id="view-packages" hidden></section>
+  <section class="view" id="view-locations" hidden></section>
+  <aside id="details"></aside>
+</main>
+<dialog id="dlg"></dialog>
+<div id="toast" role="status"></div>
+<script>
+/*__BOOT__*/
+const BOOT = window.BOOT || {};
+const LIVE = !!BOOT.token;
+const KIND = {
+  'conda-root': { label: 'Conda base', col: 0 },
+  base:         { label: 'Interpreter', col: 0 },
+  missing:      { label: 'Missing interpreter', col: 0 },
+  conda:        { label: 'Conda env', col: 1 },
+  venv:         { label: 'Virtual env', col: 1 },
+  user:         { label: 'User packages', col: 1 },
+  kernel:       { label: 'Jupyter kernel', col: 2 },
+};
+let DATA = BOOT.data || null, byId = {}, selected = null, query = '', view = 'map';
+let pkgFilter = '', pkgOpts = { multi: false, differ: false }, showMissingLocations = false;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const canon = n => n.toLowerCase().replace(/[-_.]+/g, '-');
+const kindColor = k => `var(--k-${k})`;
+const fmtSize = b => b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(1) + ' KB' : b < 1073741824 ? (b / 1048576).toFixed(1) + ' MB' : (b / 1073741824).toFixed(2) + ' GB';
+const all = () => DATA ? DATA.environments.concat(DATA.kernels) : [];
+
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove('on'), 2600);
+}
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: body ? 'POST' : 'GET',
+    headers: { 'X-Token': BOOT.token, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || res.statusText);
+  return json;
+}
+async function copy(text) {
+  try { await navigator.clipboard.writeText(text); }
+  catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+    ta.select(); document.execCommand('copy'); ta.remove();
+  }
+  toast('Copied to clipboard');
+}
+
+function index() {
+  byId = {};
+  all().forEach(n => { byId[n.id] = n; });
+}
+function issues() { return all().filter(n => n.issues && n.issues.length); }
+
+// ---------------------------------------------------------------- search
+function pkgHit(n) {
+  if (!query || !n.packages) return null;
+  const q = canon(query);
+  return n.packages.find(p => canon(p.name) === q) || n.packages.find(p => canon(p.name).includes(q)) || null;
+}
+function matches(n) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  const hay = [n.name, n.display_name, n.path, n.version, KIND[n.kind].label].concat(n.tags || []).join(' ').toLowerCase();
+  return hay.includes(q) || !!pkgHit(n);
+}
+
+// ---------------------------------------------------------------- map
+function layout() {
+  const envs = DATA.environments;
+  const pos = {}, kids = {}, orphans = [];
+  const tops = envs.filter(e => KIND[e.kind].col === 0);
+  envs.filter(e => KIND[e.kind].col === 1).forEach(e => {
+    if (e.parent && byId[e.parent] && KIND[byId[e.parent].kind].col === 0) (kids[e.parent] = kids[e.parent] || []).push(e);
+    else orphans.push(e);
+  });
+  let row = 0;
+  tops.forEach(t => {
+    const c = kids[t.id] || [], n = Math.max(1, c.length);
+    pos[t.id] = { col: 0, row: row + (n - 1) / 2 };
+    c.forEach((e, i) => { pos[e.id] = { col: 1, row: row + i }; });
+    row += n + 0.4;
+  });
+  orphans.forEach(e => { pos[e.id] = { col: 1, row: row++ }; });
+  let krow = -1;
+  const ks = DATA.kernels.slice().sort((a, b) => (a.env && pos[a.env] ? pos[a.env].row : 1e9) - (b.env && pos[b.env] ? pos[b.env].row : 1e9));
+  ks.forEach(k => {
+    const target = k.env && pos[k.env] ? pos[k.env].row : krow + 1;
+    krow = Math.max(krow + 1, target);
+    pos[k.id] = { col: 2, row: krow };
+  });
+  const rows = Math.max(row, krow + 1, 1);
+  return { pos, rows };
+}
+
+function trunc(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+function subLabel(n) {
+  if (n.kind === 'kernel') return [n.language, n.name].filter(Boolean).join(' · ');
+  const hit = pkgHit(n);
+  if (hit) return `${hit.name} ${hit.version}`;
+  const bits = [];
+  if (n.version) bits.push(n.version);
+  if (n.packages) bits.push(n.packages.length + ' pkgs');
+  if (n.tags && n.tags[0]) bits.push(n.tags[0]);
+  return bits.join(' · ');
+}
+
+function renderMap() {
+  const box = $('#graph');
+  if (!DATA.environments.length && !DATA.kernels.length) {
+    box.innerHTML = `<div class="empty">No Python installations were found.<br>Try adding folders with <code>pymapper ui --scan-dir PATH</code>.</div>`;
+    return;
+  }
+  const { pos, rows } = layout();
+  const W = Math.max(box.clientWidth, 620), RH = 50, NH = 40, TOP = 34;
+  const nw = Math.min(290, Math.floor((W - 64) / 3.2));
+  const xs = [0, Math.round((W - nw) / 2), W - nw];
+  const H = TOP + rows * RH;
+  const chars = Math.floor((nw - 22) / 7.2);
+  const y = id => TOP + pos[id].row * RH;
+  const counts = [0, 0, 0];
+  Object.values(pos).forEach(p => counts[p.col]++);
+
+  let edges = '', nodes = '';
+  const edge = (a, b, cls) => {
+    if (!pos[a] || !pos[b]) return;
+    const x1 = xs[pos[a].col] + nw, y1 = y(a) + NH / 2, x2 = xs[pos[b].col], y2 = y(b) + NH / 2;
+    const mx = (x1 + x2) / 2;
+    const dim = query && !(matches(byId[a]) && matches(byId[b])) ? ' dim' : '';
+    edges += `<path class="edge${cls ? ' ' + cls : ''}${dim}" data-a="${a}" data-b="${b}" d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"/>`;
+  };
+  DATA.environments.forEach(e => { if (e.parent) edge(e.parent, e.id, e.kind === 'user' ? 'dash' : ''); });
+  DATA.kernels.forEach(k => { if (k.env) edge(k.env, k.id, ''); });
+
+  all().forEach(n => {
+    const p = pos[n.id]; if (!p) return;
+    const cls = ['node'];
+    if (n.id === selected) cls.push('sel');
+    if (n.issues && n.issues.length) cls.push('bad');
+    if (!matches(n)) cls.push('dim');
+    const title = n.kind === 'kernel' ? n.display_name : n.name;
+    nodes += `<g class="${cls.join(' ')}" data-id="${n.id}" transform="translate(${xs[p.col]},${y(n.id)})">
+      <title>${esc(KIND[n.kind].label + ': ' + n.path)}</title>
+      <rect class="box" width="${nw}" height="${NH}" rx="7"/>
+      <rect width="5" height="${NH - 12}" x="6" y="6" rx="2" fill="${kindColor(n.kind)}"/>
+      <text x="18" y="17">${esc(trunc(title, chars))}</text>
+      <text class="sub" x="18" y="32">${esc(trunc(subLabel(n), chars + 4))}</text>
+    </g>`;
+  });
+  const heads = ['Interpreters & conda bases', 'Environments', 'Jupyter kernels']
+    .map((t, i) => `<text class="col-title" x="${xs[i]}" y="14">${t} (${counts[i]})</text>`).join('');
+  box.innerHTML = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Map of Python environments">${heads}${edges}${nodes}</svg>`;
+}
+
+function highlight(id) {
+  document.querySelectorAll('#graph .hl').forEach(el => el.classList.remove('hl'));
+  if (!id) return;
+  document.querySelectorAll(`#graph .edge[data-a="${id}"], #graph .edge[data-b="${id}"]`).forEach(el => {
+    el.classList.add('hl');
+    [el.dataset.a, el.dataset.b].forEach(o => { const g = document.querySelector(`#graph .node[data-id="${o}"]`); if (g) g.classList.add('hl'); });
+  });
+}
+
+function renderLegend() {
+  $('#legend').innerHTML = Object.entries(KIND).map(([k, v]) => `<span><i style="background:${kindColor(k)}"></i>${v.label}</span>`).join('')
+    + '<span>Dashed red outline = needs attention</span>';
+}
+
+// ---------------------------------------------------------------- packages view
+function renderPackages() {
+  const idx = {};
+  DATA.environments.forEach(e => (e.packages || []).forEach(p => {
+    const k = canon(p.name);
+    (idx[k] = idx[k] || { name: p.name, items: [] }).items.push({ env: e, version: p.version });
+  }));
+  const q = canon(query || pkgFilter || '');
+  let rows = Object.values(idx).filter(r => !q || canon(r.name).includes(q));
+  rows.forEach(r => { r.differ = new Set(r.items.map(i => i.version)).size > 1; });
+  if (pkgOpts.multi) rows = rows.filter(r => r.items.length > 1);
+  if (pkgOpts.differ) rows = rows.filter(r => r.differ);
+  rows.sort((a, b) => b.items.length - a.items.length || a.name.localeCompare(b.name));
+  const total = rows.length, shown = rows.slice(0, 400);
+  const body = shown.map(r => {
+    const versions = {};
+    r.items.forEach(i => { versions[i.version] = (versions[i.version] || 0) + 1; });
+    const common = Object.keys(versions).sort((a, b) => versions[b] - versions[a])[0];
+    return `<tr><td><b>${esc(r.name)}</b>${r.differ ? '<small>versions differ</small>' : ''}</td><td class="x">${r.items.length}</td><td>${
+      r.items.map(i => `<span class="chip${r.differ && i.version !== common ? ' odd' : ''}" data-goto="${i.env.id}" title="${esc(i.env.path)}">${esc(i.env.name)} · ${esc(i.version)}</span>`).join('')}</td></tr>`;
+  }).join('');
+  $('#view-packages').innerHTML = `
+    <div class="toolbar">
+      <label><input type="checkbox" data-opt="multi" ${pkgOpts.multi ? 'checked' : ''}> In 2+ environments</label>
+      <label><input type="checkbox" data-opt="differ" ${pkgOpts.differ ? 'checked' : ''}> Versions differ</label>
+      <span>${total} packages${total > shown.length ? `, showing first ${shown.length} (use the filter)` : ''}</span>
+    </div>
+    <div class="card"><table><thead><tr><th>Package</th><th>Envs</th><th>Where it is installed</th></tr></thead><tbody>${body || '<tr><td colspan="3" class="muted">No packages match.</td></tr>'}</tbody></table></div>`;
+}
+
+// ---------------------------------------------------------------- locations view
+function renderLocations() {
+  const q = (query || '').toLowerCase();
+  const locs = DATA.locations.filter(l => (showMissingLocations || l.exists) && (!q || (l.label + ' ' + l.path).toLowerCase().includes(q)));
+  const missing = DATA.locations.filter(l => !l.exists).length;
+  $('#view-locations').innerHTML = `
+    <div class="toolbar">
+      <span>Folders PythonMapper checked on ${esc(DATA.host)} (${esc(DATA.platform)}).</span>
+      <label><input type="checkbox" id="showmissing" ${showMissingLocations ? 'checked' : ''}> Show ${missing} that don't exist</label>
+    </div>
+    <div class="card"><table><thead><tr><th>Looked for</th><th>Folder</th><th></th></tr></thead><tbody>${
+      locs.map(l => `<tr><td>${esc(l.label)}</td><td><code>${esc(l.path)}</code></td><td class="x">${l.exists ? '<span class="ok">found</span>' : '<span class="muted">absent</span>'}</td></tr>`).join('')
+    }</tbody></table></div>`;
+}
+
+// ---------------------------------------------------------------- details panel
+const link = id => byId[id] ? `<a data-goto="${id}">${esc(byId[id].display_name || byId[id].name)}</a>` : '<span class="muted">unknown</span>';
+
+function overview() {
+  const envs = DATA.environments, bad = issues();
+  const count = k => envs.filter(e => e.kind === k).length;
+  const pkgs = envs.reduce((s, e) => s + (e.packages ? e.packages.length : 0), 0);
+  return `<h2>Overview</h2>
+    <dl>
+      <dt>Interpreters</dt><dd>${count('base')}</dd>
+      <dt>Conda</dt><dd>${count('conda-root')} base install(s), ${count('conda')} env(s)</dd>
+      <dt>Virtual envs</dt><dd>${count('venv')}</dd>
+      <dt>Kernels</dt><dd>${DATA.kernels.length}</dd>
+      <dt>Packages</dt><dd>${pkgs} installs in total</dd>
+      <dt>Scanned</dt><dd>${esc(DATA.generated)} in ${DATA.duration}s</dd>
+    </dl>
+    <h3>Needs attention (${bad.length})</h3>
+    ${bad.length ? bad.map(n => `<div class="issue"><b>${link(n.id)}</b><br>${n.issues.map(esc).join('<br>')}</div>`).join('') : '<p class="muted">Nothing broken was found.</p>'}
+    <h3>Tips</h3>
+    <p class="muted">Click any box on the map for details, packages and ready-to-copy commands. Type a package name in the filter to see which environments have it.</p>
+    <p class="credit">PythonMapper ${esc(DATA.tool_version || '')}. Made by Daniel Margolis.</p>`;
+}
+
+function commandsHtml(n) {
+  if (!n.commands || !n.commands.length) return '';
+  return `<h3>Commands</h3>` + n.commands.map((c, i) => `<div class="cmd"><span>${esc(c.label)}</span><code>${esc(c.cmd)}</code><button class="mini" data-copycmd="${i}">Copy</button></div>`).join('');
+}
+
+function kernelDetails(n) {
+  return `<span class="badge"><i style="background:${kindColor('kernel')}"></i>Jupyter kernel</span>
+    <h2>${esc(n.display_name)}</h2>
+    ${n.issues.map(i => `<div class="issue"><b>Problem:</b> ${esc(i)}</div>`).join('')}
+    <dl>
+      <dt>Kernel name</dt><dd>${esc(n.name)}</dd>
+      <dt>Language</dt><dd>${esc(n.language || '—')}</dd>
+      <dt>Runs in</dt><dd>${n.env ? link(n.env) : `<span class="muted">${esc(n.note || 'No matching environment found')}</span>`}</dd>
+      <dt>Spec folder</dt><dd><code>${esc(n.path)}</code></dd>
+      <dt>Command</dt><dd><code>${esc(n.argv.join(' '))}</code></dd>
+    </dl>
+    ${LIVE ? `<p class="row"><button data-open>Open folder</button><button data-copy="${esc(n.path)}">Copy path</button></p>` : ''}
+    ${commandsHtml(n)}
+    ${LIVE ? `<div class="danger-zone"><button class="danger" data-op="remove">Remove kernel</button></div>` : ''}`;
+}
+
+const tools = () => (DATA && DATA.tools) || {};
+const condaTools = () => ['mamba', 'micromamba', 'conda'].filter(t => tools()[t]);
+
+function manageHtml(n) {
+  if (!LIVE || !['base', 'conda-root', 'conda', 'venv'].includes(n.kind)) return '';
+  const isConda = n.kind === 'conda' || n.kind === 'conda-root';
+  const options = isConda && condaTools().length
+    ? `<select name="tool" aria-label="Tool"><option value="">${esc(condaTools()[0])} (auto)</option>${condaTools().map(t => `<option>${t}</option>`).join('')}<option>pip</option></select>`
+    : '';
+  const canInstall = n.python || isConda;
+  return `${canInstall ? `<h3>Install packages</h3>
+      <form class="row" id="pkgform"><input type="text" name="pkg" placeholder="e.g. requests  numpy==1.26" aria-label="Packages" autocomplete="off">${options}
+      <button class="primary" data-act="install">Install</button><button data-act="upgrade">Upgrade</button></form>
+      <p class="muted">${isConda ? 'Uses mamba, then conda; falls back to pip for packages conda doesn’t have.' : 'Uses pip (conda only manages conda environments).'}</p>` : ''}
+    <div class="danger-zone">${n.kind === 'venv' || n.kind === 'conda'
+      ? '<button class="danger" data-op="remove">Remove environment</button>'
+      : '<button class="danger" data-op="python-uninstall">Uninstall this Python</button>'}</div>`;
+}
+
+function envDetails(n) {
+  const children = DATA.environments.filter(e => e.parent === n.id);
+  const canPip = LIVE && ['base', 'conda-root', 'conda', 'venv'].includes(n.kind) && (n.python || n.kind.startsWith('conda'));
+  const tags = (n.tags || []).map(t => `<span class="badge">${esc(t)}</span>`).join('');
+  const f = pkgFilter.toLowerCase();
+  const pkgs = (n.packages || []).filter(p => !f || p.name.toLowerCase().includes(f));
+  const rows = pkgs.map(p => `<tr><td>${esc(p.name)}${p.summary ? `<small>${esc(p.summary)}</small>` : ''}</td><td>${esc(p.version)}</td><td class="x muted">${esc(p.channel || p.installer || '')}</td>${
+    canPip ? `<td class="x"><button class="mini" data-uninstall="${esc(p.name)}" title="Uninstall ${esc(p.name)}">✕</button></td>` : ''}</tr>`).join('');
+  return `<span class="badge"><i style="background:${kindColor(n.kind)}"></i>${KIND[n.kind].label}</span>${tags}
+    <h2>${esc(n.name)}</h2>
+    ${n.issues.map(i => `<div class="issue"><b>Problem:</b> ${esc(i)}</div>`).join('')}
+    <dl>
+      <dt>Version</dt><dd>${esc(n.version || 'unknown')}</dd>
+      <dt>Folder</dt><dd><code>${esc(n.path)}</code></dd>
+      ${n.python ? `<dt>Python</dt><dd><code>${esc(n.python)}</code></dd>` : ''}
+      ${n.parent ? `<dt>${n.kind === 'user' ? 'Used by' : 'Created from'}</dt><dd>${link(n.parent)}</dd>` : ''}
+      ${n.home && !n.parent ? `<dt>Base</dt><dd><code>${esc(n.home)}</code></dd>` : ''}
+      ${children.length ? `<dt>${n.kind === 'missing' ? 'Affected' : 'Environments'}</dt><dd>${children.map(c => link(c.id)).join(', ')}</dd>` : ''}
+      ${n.kernels && n.kernels.length ? `<dt>Kernels</dt><dd>${n.kernels.map(link).join(', ')}</dd>` : ''}
+      ${n.site_packages && n.site_packages.length ? `<dt>Packages in</dt><dd>${n.site_packages.map(s => `<code>${esc(s)}</code>`).join('<br>')}</dd>` : ''}
+      <dt>Disk size</dt><dd>${n.size != null ? fmtSize(n.size) : LIVE && n.kind !== 'missing' ? '<button class="mini" data-size>Calculate</button>' : '<span class="muted">—</span>'}</dd>
+    </dl>
+    ${LIVE && n.kind !== 'missing' ? `<p class="row"><button data-open>Open folder</button><button data-copy="${esc(n.path)}">Copy path</button></p>` : ''}
+    ${manageHtml(n)}
+    ${commandsHtml(n)}
+    ${n.packages ? `<h3>Packages (${n.packages.length})</h3>
+      <input type="search" id="pkgfilter" placeholder="Filter packages" value="${esc(pkgFilter)}" style="width:100%;margin-bottom:8px">
+      <table><thead><tr><th>Name</th><th>Version</th><th>Source</th>${canPip ? '<th></th>' : ''}</tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">No packages.</td></tr>'}</tbody></table>` : ''}`;
+}
+
+function renderDetails() {
+  const n = byId[selected];
+  $('#details').innerHTML = !n ? overview() : n.kind === 'kernel' ? kernelDetails(n) : envDetails(n);
+}
+
+// ---------------------------------------------------------------- wiring
+function renderStats() {
+  const envs = DATA.environments, bad = issues().length;
+  const tops = envs.filter(e => KIND[e.kind].col === 0).length, mids = envs.length - tops;
+  $('#stats').innerHTML = `${tops} interpreters · ${mids} environments · ${DATA.kernels.length} kernels`
+    + (bad ? ` · <a data-goto="">${bad} need attention</a>` : '')
+    + (LIVE ? '' : ` · snapshot from ${esc(DATA.host)}, ${esc(DATA.generated)}`);
+}
+
+function render() {
+  if (!DATA) return;
+  renderStats();
+  if (view === 'map') renderMap();
+  if (view === 'packages') renderPackages();
+  if (view === 'locations') renderLocations();
+  renderDetails();
+}
+
+function select(id) {
+  if (id !== selected) { pkgFilter = ''; }
+  selected = id || null;
+  if (view === 'map') renderMap();
+  renderDetails();
+  $('#details').scrollTop = 0;
+  if (window.innerWidth <= 900 && selected) $('#details').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function load(refresh) {
+  $('#stats').textContent = refresh ? 'Rescanning…' : 'Scanning…';
+  $('#rescan').disabled = true;
+  try {
+    DATA = await api('/api/scan' + (refresh ? '?refresh=1' : ''));
+    index();
+    if (selected && !byId[selected]) selected = null;
+    render();
+    if (refresh) toast(`Scan finished in ${DATA.duration}s`);
+  } catch (e) {
+    $('#stats').textContent = 'Scan failed: ' + e.message;
+  } finally {
+    $('#rescan').disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------- operations
+// Every change is planned on the server first, shown for confirmation, then run as a job.
+const dlg = $('#dlg');
+let dlgAction = null;
+const TOOL_NAMES = { pymanager: 'Python install manager', uv: 'uv', pyenv: 'pyenv', brew: 'Homebrew' };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function openDialog(html) {
+  dlg.innerHTML = html;
+  if (!dlg.open) dlg.showModal();
+  const first = dlg.querySelector('input'); if (first) first.focus();
+}
+
+async function operate(op, params) {
+  let plan;
+  try { plan = await api('/api/plan', { op, params }); } catch (e) { return toast(e.message); }
+  const steps = plan.steps.map(s => `<li>${esc(s.label)}${s.optional ? ' <span class="muted">(optional)</span>' : ''}<code>${esc(s.command)}</code>${
+    s.fallback.length ? `<small class="muted">If conda doesn’t have a package, instead: ${s.fallback.map(f => esc(f.command)).join(' then ')}</small>` : ''}</li>`).join('');
+  openDialog(`<h2>${esc(plan.title)}</h2><p class="muted">This will run:</p><ol>${steps}</ol>
+    ${plan.notes.map(n => `<div class="issue">${esc(n)}</div>`).join('')}
+    <div class="dlg-actions"><button data-dlg="close">Cancel</button>
+    <button class="${plan.destructive ? 'danger solid' : 'primary'}" data-dlg="run">${plan.destructive ? 'Yes, do it' : 'Run'}</button></div>`);
+  dlgAction = () => runJob(op, params, plan.title);
+}
+
+async function runJob(op, params, title) {
+  let job;
+  try { job = await api('/api/run', { op, params }); } catch (e) { return toast(e.message); }
+  openDialog(`<h2>${esc(title)}</h2><pre class="log" id="joblog"></pre>
+    <div class="dlg-actions"><button data-dlg="close" id="jobclose" disabled>Running…</button></div>`);
+  let since = 0;
+  for (;;) {
+    await sleep(600);
+    const log = $('#joblog');
+    let r;
+    try { r = await api(`/api/job?id=${job.job}&since=${since}`); } catch (e) { log.textContent += '\n' + e.message; break; }
+    if (r.output) { log.textContent += r.output; log.scrollTop = log.scrollHeight; }
+    since = r.next;
+    if (r.done) {
+      DATA = r.data; index();
+      if (selected && !byId[selected]) selected = null;
+      render();
+      toast(r.ok ? 'Finished' : 'Failed: see the log');
+      break;
+    }
+  }
+  const btn = $('#jobclose'); btn.disabled = false; btn.textContent = 'Close';
+}
+
+function newEnvDialog() {
+  const ct = condaTools();
+  openDialog(`<h2>New environment</h2><form id="envform">
+    <label for="f-name">Name</label><input id="f-name" type="text" name="name" required placeholder="myproject" autocomplete="off">
+    <label for="f-kind">Type</label><select id="f-kind" name="kind">
+      ${ct.length ? `<option value="conda">Conda environment (${esc(ct[0])})</option>` : ''}
+      <option value="venv">Virtual environment (venv)</option></select>
+    <label for="f-py">Python version (optional)</label><input id="f-py" type="text" name="python" placeholder="e.g. 3.12; newest available if empty">
+    <label for="f-pk">Packages (optional)</label><input id="f-pk" type="text" name="packages" placeholder="e.g. numpy pandas ipykernel">
+    <label for="f-path">Location (optional)</label><input id="f-path" type="text" name="path" placeholder="Default: conda's envs folder, or ~/.virtualenvs/NAME">
+    <div class="dlg-actions"><button type="button" data-dlg="close">Cancel</button><button class="primary">Continue</button></div></form>`);
+}
+
+function newPythonDialog() {
+  const avail = Object.keys(TOOL_NAMES).filter(t => tools()[t]);
+  openDialog(`<h2>Install Python</h2>${avail.length ? `<form id="pyform">
+    <label for="f-ver">Version</label><input id="f-ver" type="text" name="version" required placeholder="e.g. 3.13" autocomplete="off">
+    <label for="f-via">Install with</label><select id="f-via" name="via">${avail.map(t => `<option value="${t}">${TOOL_NAMES[t]}</option>`).join('')}</select>
+    <div class="dlg-actions"><button type="button" data-dlg="close">Cancel</button><button class="primary">Continue</button></div></form>`
+    : `<p>PythonMapper installs Python through uv, pyenv, Homebrew or (on Windows) the Python install manager, and none of them was found.</p>
+       <p>The quickest to set up is <a href="https://docs.astral.sh/uv/" target="_blank" rel="noopener">uv</a>. Rescan after installing it.</p>
+       <div class="dlg-actions"><button data-dlg="close">Close</button></div>`}`);
+}
+
+dlg.addEventListener('cancel', e => { const b = $('#jobclose'); if (b && b.disabled) e.preventDefault(); });
+
+document.addEventListener('click', async e => {
+  const t = e.target.closest('[data-goto],[data-copy],[data-copycmd],[data-open],[data-size],[data-uninstall],[data-op],[data-dlg],[data-view],.node');
+  if (!t) return;
+  if (t.dataset.dlg === 'close') return dlg.close();
+  if (t.dataset.dlg === 'run') return dlgAction && dlgAction();
+  if (t.dataset.op) return operate(t.dataset.op, { target: selected });
+  if (t.dataset.uninstall) return operate('uninstall', { target: selected, packages: t.dataset.uninstall });
+  if (t.matches('.node')) return select(t.dataset.id);
+  if (t.dataset.view) {
+    view = t.dataset.view;
+    document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b === t));
+    document.querySelectorAll('.view').forEach(s => { s.hidden = s.id !== 'view-' + view; });
+    return render();
+  }
+  if (t.dataset.goto !== undefined) return select(t.dataset.goto);
+  if (t.dataset.copy !== undefined) return copy(t.dataset.copy);
+  if (t.dataset.copycmd !== undefined) return copy(byId[selected].commands[+t.dataset.copycmd].cmd);
+  const n = byId[selected];
+  try {
+    if (t.dataset.open !== undefined) { await api('/api/open', { id: n.id }); }
+    if (t.dataset.size !== undefined) {
+      t.disabled = true; t.textContent = 'Calculating…';
+      n.size = (await api('/api/size', { id: n.id })).size;
+      renderDetails();
+    }
+  } catch (err) { toast(err.message); }
+});
+
+document.addEventListener('submit', e => {
+  const f = e.target;
+  e.preventDefault();
+  const v = name => (f.elements[name] ? f.elements[name].value.trim() : '');
+  if (f.id === 'pkgform') {
+    if (!v('pkg')) return toast('Enter a package name first');
+    operate((e.submitter && e.submitter.dataset.act) || 'install', { target: selected, packages: v('pkg'), tool: v('tool') });
+  }
+  if (f.id === 'envform') operate('create', { name: v('name'), kind: v('kind'), python: v('python'), packages: v('packages'), path: v('path') });
+  if (f.id === 'pyform') operate('python-install', { version: v('version'), via: v('via') });
+});
+
+document.addEventListener('input', e => {
+  if (e.target.id === 'search') { query = e.target.value.trim(); render(); }
+  if (e.target.id === 'pkgfilter') {
+    pkgFilter = e.target.value; const pos = e.target.selectionStart;
+    renderDetails(); const el = $('#pkgfilter'); el.focus(); el.setSelectionRange(pos, pos);
+  }
+});
+
+document.addEventListener('change', e => {
+  if (e.target.dataset.opt) { pkgOpts[e.target.dataset.opt] = e.target.checked; renderPackages(); }
+  if (e.target.id === 'showmissing') { showMissingLocations = e.target.checked; renderLocations(); }
+});
+
+$('#graph').addEventListener('mouseover', e => { const g = e.target.closest('.node'); highlight(g && g.dataset.id); });
+$('#graph').addEventListener('mouseleave', () => highlight(null));
+$('#rescan').addEventListener('click', () => load(true));
+$('#newenv').addEventListener('click', newEnvDialog);
+$('#newpython').addEventListener('click', newPythonDialog);
+$('#export').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(DATA, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'pythonmapper-scan.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (DATA && view === 'map') renderMap(); }, 120); });
+
+renderLegend();
+if (LIVE) { $('#newenv').hidden = false; $('#newpython').hidden = false; load(false); }
+else if (DATA) { $('#rescan').hidden = true; index(); render(); }
+else $('#stats').textContent = 'No data.';
+</script>
+</body>
+</html>
